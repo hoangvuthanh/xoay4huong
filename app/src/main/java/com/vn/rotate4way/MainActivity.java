@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.TypedValue;
@@ -25,7 +24,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
         root.setPadding(dp(20), dp(40), dp(20), dp(20));
 
         TextView title = new TextView(this);
-        title.setText("Xoay Màn Hình Siêu Nhẹ");
+        title.setText("Xoay Màn Hình (Hỗ Trợ Khóa)");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
         root.addView(title);
@@ -40,14 +39,14 @@ public class MainActivity extends Activity implements View.OnClickListener {
         st.setLayoutParams(slp);
         root.addView(st);
 
-        pBtn = btn(1, "Cấp quyền Xuất hiện trên cùng", "#E65100");
+        pBtn = btn(1, "Bật quyền Hỗ trợ (Trợ năng)", "#E65100");
         root.addView(pBtn);
         root.addView(btn(2, "Xoay 2 hướng (Dọc & Ngược 180°)", "#00897B"));
         root.addView(btn(3, "Xoay 4 hướng (Đủ 360°)", "#1E88E5"));
         root.addView(btn(4, "Tắt (1 hướng dọc mặc định)", "#424242"));
 
         TextView note = new TextView(this);
-        note.setText("Mẹo: Tắt nút Tự động xoay mặc định của Samsung để khi phím tắt này ở màu xám (Tắt), máy luôn đứng yên 1 hướng dọc và app không tốn RAM.");
+        note.setText("Hướng dẫn bật quyền trên Samsung:\nBấm nút cam ở trên -> Dịch vụ đã cài đặt (hoặc Ứng dụng đã cài đặt) -> Xoay 4 Hướng -> Gạt Bật.\n\nApp không đọc nội dung màn hình, không cần quyền lớp phủ cũ và không hiện thông báo thừa.");
         note.setTextColor(Color.parseColor("#B0BEC5"));
         note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(-1, -2);
@@ -62,7 +61,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
     public void onClick(View v) {
         int id = v.getId();
         if (id == 1) {
-            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
             return;
         }
         if (id == 4) {
@@ -70,8 +69,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
             refresh();
             return;
         }
-        if (!Settings.canDrawOverlays(this)) {
-            Toast.makeText(this, "Cấp quyền 'Xuất hiện trên cùng' trước!", Toast.LENGTH_LONG).show();
+        if (!RotateService.isEnabled()) {
+            Toast.makeText(this, "Vui lòng bật quyền Hỗ trợ (Trợ năng) trước!", Toast.LENGTH_LONG).show();
             return;
         }
         RotateService.setMode(this, id == 2 ? RotateService.MODE_2WAY : RotateService.MODE_4WAY);
@@ -97,13 +96,13 @@ public class MainActivity extends Activity implements View.OnClickListener {
     }
 
     private void refresh() {
-        boolean ok = Settings.canDrawOverlays(this);
+        boolean ok = RotateService.isEnabled();
         pBtn.setVisibility(ok ? View.GONE : View.VISIBLE);
         int s = RotateService.getState();
         GradientDrawable bg = new GradientDrawable();
         bg.setCornerRadius(dp(10));
         if (!ok) {
-            st.setText("Chưa cấp quyền lớp phủ");
+            st.setText("Chưa bật dịch vụ Hỗ trợ (Trợ năng)");
             st.setTextColor(Color.parseColor("#FFCC80"));
             bg.setColor(Color.parseColor("#3E2723"));
         } else if (s == RotateService.MODE_2WAY) {
