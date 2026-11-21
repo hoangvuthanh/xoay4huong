@@ -2,7 +2,6 @@ package com.vn.rotate4way;
 
 import android.content.*;
 import android.os.Build;
-import android.provider.Settings;
 import android.service.quicksettings.*;
 
 public class RotateTileService extends TileService {
@@ -23,7 +22,7 @@ public class RotateTileService extends TileService {
     @SuppressWarnings("deprecation")
     public void onClick() {
         super.onClick();
-        if (!Settings.canDrawOverlays(this)) {
+        if (!RotateService.isEnabled()) {
             startActivityAndCollapse(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             return;
         }
