@@ -1,113 +1,134 @@
 package com.vn.rotate4way;
 
-import android.app.*;
-import android.content.*;
-import android.content.pm.ActivityInfo;
-import android.graphics.PixelFormat;
-import android.graphics.drawable.Icon;
-import android.os.*;
+import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Bundle;
 import android.provider.Settings;
+import android.util.TypedValue;
 import android.view.*;
+import android.widget.*;
 
-public class RotateService extends Service {
-    public static final String ACTION_START = "com.vn.rotate4way.START";
-    public static final String ACTION_STOP = "com.vn.rotate4way.STOP";
-    public static final String ACTION_STATE = "com.vn.rotate4way.STATE";
-    public static final String EXTRA_MODE = "mode";
-    private static final String PREF = "r4_prefs", KEY = "mode", CH = "r4_ch";
-    private static volatile boolean sRunning = false;
-    private static volatile int sMode = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
-    private WindowManager wm;
-    private View overlay;
-    private WindowManager.LayoutParams lp;
-
-    public static boolean isRunning() { return sRunning; }
-    public static int getCurrentMode() { return sMode; }
-    public static int getSavedMode(Context c) {
-        return c.getSharedPreferences(PREF, MODE_PRIVATE).getInt(KEY, ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR);
-    }
-    public static void saveMode(Context c, int m) {
-        c.getSharedPreferences(PREF, MODE_PRIVATE).edit().putInt(KEY, m).apply();
-    }
-    public static void start(Context c, int m) {
-        saveMode(c, m);
-        Intent i = new Intent(c, RotateService.class).setAction(ACTION_START).putExtra(EXTRA_MODE, m);
-        if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
-    }
-    public static void stop(Context c) {
-        c.startService(new Intent(c, RotateService.class).setAction(ACTION_STOP));
-    }
-
-    @Override public IBinder onBind(Intent i) { return null; }
+public class MainActivity extends Activity implements View.OnClickListener {
+    private TextView st;
+    private Button pBtn;
 
     @Override
-    public int onStartCommand(Intent i, int f, int id) {
-        if (i != null && ACTION_STOP.equals(i.getAction())) {
-            removeOverlay(); sRunning = false; notifyState();
-            stopForeground(true); stopSelf(); return START_NOT_STICKY;
+    protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setBackgroundColor(Color.parseColor("#121212"));
+        root.setPadding(dp(20), dp(40), dp(20), dp(20));
+
+        TextView title = new TextView(this);
+        title.setText("Xoay Màn Hình Siêu Nhẹ");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        root.addView(title);
+
+        st = new TextView(this);
+        st.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        st.setGravity(Gravity.CENTER);
+        st.setPadding(dp(12), dp(10), dp(12), dp(10));
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, -2);
+        slp.topMargin = dp(16);
+        slp.bottomMargin = dp(20);
+        st.setLayoutParams(slp);
+        root.addView(st);
+
+        pBtn = btn(1, "Cấp quyền Xuất hiện trên cùng", "#E65100");
+        root.addView(pBtn);
+        root.addView(btn(2, "Xoay 2 hướng (Dọc & Ngược 180°)", "#00897B"));
+        root.addView(btn(3, "Xoay 4 hướng (Đủ 360°)", "#1E88E5"));
+        root.addView(btn(4, "Tắt (1 hướng dọc mặc định)", "#424242"));
+
+        TextView note = new TextView(this);
+        note.setText("Mẹo: Tắt nút Tự động xoay mặc định của Samsung để khi phím tắt này ở màu xám (Tắt), máy luôn đứng yên 1 hướng dọc và app không tốn RAM.");
+        note.setTextColor(Color.parseColor("#B0BEC5"));
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(-1, -2);
+        nlp.topMargin = dp(16);
+        note.setLayoutParams(nlp);
+        root.addView(note);
+
+        setContentView(root);
+    }
+
+    @Override
+    public void onClick(View v) {
+        int id = v.getId();
+        if (id == 1) {
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        if (id == 4) {
+            RotateService.setMode(this, RotateService.MODE_OFF);
+            refresh();
+            return;
         }
         if (!Settings.canDrawOverlays(this)) {
-            sRunning = false; notifyState(); stopSelf(); return START_NOT_STICKY;
+            Toast.makeText(this, "Cấp quyền 'Xuất hiện trên cùng' trước!", Toast.LENGTH_LONG).show();
+            return;
         }
-        int mode = (i != null && i.hasExtra(EXTRA_MODE)) ? i.getIntExtra(EXTRA_MODE, ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR) : getSavedMode(this);
-        sMode = mode; saveMode(this, mode);
-        startForeground(101, buildNotif(mode));
-        applyOverlay(mode);
-        sRunning = true; notifyState();
-        return START_STICKY;
+        RotateService.setMode(this, id == 2 ? RotateService.MODE_2WAY : RotateService.MODE_4WAY);
+        refresh();
     }
 
-    private void applyOverlay(int mode) {
-        if (wm == null) wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        if (wm == null) return;
-        if (overlay == null) {
-            overlay = new View(this);
-            int type = (Build.VERSION.SDK_INT >= 26) ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY : WindowManager.LayoutParams.TYPE_PHONE;
-            lp = new WindowManager.LayoutParams(0, 0, type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT);
-            lp.screenOrientation = mode;
-            try { wm.addView(overlay, lp); } catch (Exception e) { overlay = null; }
+    private Button btn(int id, String t, String hex) {
+        Button b = new Button(this);
+        b.setId(id);
+        b.setText(t);
+        b.setAllCaps(false);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor(hex));
+        bg.setCornerRadius(dp(12));
+        b.setBackground(bg);
+        b.setOnClickListener(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(50));
+        lp.bottomMargin = dp(10);
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    private void refresh() {
+        boolean ok = Settings.canDrawOverlays(this);
+        pBtn.setVisibility(ok ? View.GONE : View.VISIBLE);
+        int s = RotateService.getState();
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(10));
+        if (!ok) {
+            st.setText("Chưa cấp quyền lớp phủ");
+            st.setTextColor(Color.parseColor("#FFCC80"));
+            bg.setColor(Color.parseColor("#3E2723"));
+        } else if (s == RotateService.MODE_2WAY) {
+            st.setText("ĐANG BẬT: Xoay 2 hướng (Dọc & Ngược)");
+            st.setTextColor(Color.parseColor("#A5D6A7"));
+            bg.setColor(Color.parseColor("#004D40"));
+        } else if (s == RotateService.MODE_4WAY) {
+            st.setText("ĐANG BẬT: Xoay 4 hướng (360°)");
+            st.setTextColor(Color.parseColor("#90CAF9"));
+            bg.setColor(Color.parseColor("#0D47A1"));
         } else {
-            lp.screenOrientation = mode;
-            try { wm.updateViewLayout(overlay, lp); } catch (Exception ignored) {}
+            st.setText("ĐANG TẮT: 1 hướng dọc mặc định");
+            st.setTextColor(Color.parseColor("#CFD8DC"));
+            bg.setColor(Color.parseColor("#263238"));
         }
+        st.setBackground(bg);
     }
 
-    private void removeOverlay() {
-        if (wm != null && overlay != null) {
-            try { wm.removeView(overlay); } catch (Exception ignored) {}
-            overlay = null;
-        }
+    private int dp(int v) {
+        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
     }
 
-    private Notification buildNotif(int mode) {
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-            if (nm != null && nm.getNotificationChannel(CH) == null) {
-                NotificationChannel ch = new NotificationChannel(CH, "Xoay 4 hướng", NotificationManager.IMPORTANCE_MIN);
-                ch.setShowBadge(false); nm.createNotificationChannel(ch);
-            }
-        }
-        PendingIntent openPi = PendingIntent.getActivity(this, 0,
-            new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        PendingIntent stopPi = PendingIntent.getService(this, 1,
-            new Intent(this, RotateService.class).setAction(ACTION_STOP),
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        Notification.Builder b = (Build.VERSION.SDK_INT >= 26)
-            ? new Notification.Builder(this, CH)
-            : new Notification.Builder(this).setPriority(Notification.PRIORITY_MIN);
-        String txt = (mode == ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT) ? "Đang khóa ngược 180°" : "Đang bật tự động 4 hướng";
-        return b.setSmallIcon(R.drawable.ic_rotate_4way).setContentTitle("Xoay 4 hướng").setContentText(txt)
-            .setOngoing(true).setContentIntent(openPi)
-            .addAction(new Notification.Action.Builder((Icon) null, "Tắt", stopPi).build()).build();
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refresh();
     }
-
-    private void notifyState() {
-        RotateTileService.requestTileUpdate(this);
-        sendBroadcast(new Intent(ACTION_STATE).setPackage(getPackageName()));
-    }
-
-    @Override public void onDestroy() { removeOverlay(); sRunning = false; notifyState(); super.onDestroy(); }
 }
